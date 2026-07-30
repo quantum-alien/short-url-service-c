@@ -1,0 +1,55 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: url_shortener_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-url_shortener}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/schema_postgres.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-url_shortener}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - url_shortener_net
+
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: url_shortener_app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8080
+      THREAD_POOL_SIZE: 8
+      BASE_URL: ${BASE_URL:-http://localhost:8080}
+      DB_TYPE: postgres
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-url_shortener}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      SHORT_KEY_LENGTH: 7
+      MAX_GENERATION_RETRIES: 5
+    ports:
+      - "8080:8080"
+    networks:
+      - url_shortener_net
+
+volumes:
+  postgres_data:
+
+networks:
+  url_shortener_net:
+    driver: bridge
